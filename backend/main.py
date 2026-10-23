@@ -31,7 +31,7 @@ class AuthRequest(BaseModel):
 # returns 401 if the token is missing, expired, altered, or if the user no longer exists
 def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)):
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Fails without a session")
+        raise HTTPException(status_code=401, detail="Fails; no session")
     
     token = authorization.split(" ")[1]
     try:
@@ -56,7 +56,7 @@ def register(request: AuthRequest, db: Session = Depends(get_db)):
     normalized_email = request.email.strip().lower()
 
     if db.query(models.User).filter(models.User.email == normalized_email).first():
-        raise HTTPException(status_code=400, detail="Fails when the email exists")
+        raise HTTPException(status_code=400, detail="email already registered")
     
     hashed_pw = hash_password(request.password)
     new_user = models.User(email=normalized_email, hashed_password=hashed_pw)
@@ -75,7 +75,7 @@ def login(request: AuthRequest, db: Session = Depends(get_db)):
 
     user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if not user or not verify_password(request.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Fails on wrong credentials")
+        raise HTTPException(status_code=401, detail="email or password incorrect.")
     
     token = jwt.encode({"sub": user.email}, SECRET_KEY, algorithm=ALGORITHM)
     return {"token": token}
