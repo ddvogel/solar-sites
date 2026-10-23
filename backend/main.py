@@ -1,7 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from passlib.context import CryptContext
+import bcrypt
 from jose import jwt, JWTError
 import models
 from database import engine, get_db
@@ -9,8 +9,17 @@ from database import engine, get_db
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
-# CryptContext! Handles slow bcrypt hashing and timing-safe comparisons to protect against brute-force and timing attacks.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def hash_password(password: str) -> str:
+    # bcrypt expects bytes and has a hard 72-byte limit
+    pwd_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    pwd_bytes = plain_password.encode('utf-8')[:72]
+    hash_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(pwd_bytes, hash_bytes)
+
 SECRET_KEY = "supersecretkey" # in production, load from environment
 ALGORITHM = "HS256"
 
@@ -20,9 +29,11 @@ class AuthRequest(BaseModel):
 
 # session protection: decodes and verifies the HMAC-SHA256 JWT.
 # returns 401 if the token is missing, expired, altered, or if the user no longer exists
-def get_current_user(token: str = None, db: Session = Depends(get_db)):
-    if not token:
+def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)):
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Fails without a session")
+    
+    token = authorization.split(" ")[1]
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
@@ -30,6 +41,7 @@ def get_current_user(token: str = None, db: Session = Depends(get_db)):
             raise HTTPException(status_code=401, detail="Invalid token")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
+        
     user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
@@ -43,7 +55,7 @@ def register(request: AuthRequest, db: Session = Depends(get_db)):
     if db.query(models.User).filter(models.User.email == request.email).first():
         raise HTTPException(status_code=400, detail="Fails when the email exists")
     
-    hashed_pw = pwd_context.hash(request.password)
+    hashed_pw = hash_password(request.password)
     new_user = models.User(email=request.email, hashed_password=hashed_pw)
     db.add(new_user)
     db.commit()
@@ -57,7 +69,7 @@ def register(request: AuthRequest, db: Session = Depends(get_db)):
 @app.post("/api/login")
 def login(request: AuthRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == request.email).first()
-    if not user or not pwd_context.verify(request.password, user.hashed_password):
+    if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Fails on wrong credentials")
     
     token = jwt.encode({"sub": user.email}, SECRET_KEY, algorithm=ALGORITHM)
