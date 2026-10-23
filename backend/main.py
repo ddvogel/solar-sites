@@ -52,11 +52,14 @@ def get_current_user(authorization: str = Header(None), db: Session = Depends(ge
 # with an active session token returned as {"token": ...}
 @app.post("/api/register", status_code=201)
 def register(request: AuthRequest, db: Session = Depends(get_db)):
-    if db.query(models.User).filter(models.User.email == request.email).first():
+    # normalize email; strip spaces and convert to lowercase
+    normalized_email = request.email.strip().lower()
+
+    if db.query(models.User).filter(models.User.email == normalized_email).first():
         raise HTTPException(status_code=400, detail="Fails when the email exists")
     
     hashed_pw = hash_password(request.password)
-    new_user = models.User(email=request.email, hashed_password=hashed_pw)
+    new_user = models.User(email=normalized_email, hashed_password=hashed_pw)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -68,7 +71,9 @@ def register(request: AuthRequest, db: Session = Depends(get_db)):
 # Returns 401 Unauthorized if credentials do not match, returning a token on success.
 @app.post("/api/login")
 def login(request: AuthRequest, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == request.email).first()
+    normalized_email = request.email.strip().lower()
+
+    user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Fails on wrong credentials")
     
