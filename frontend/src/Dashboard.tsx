@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 
 export default function Dashboard() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
@@ -65,8 +65,18 @@ export default function Dashboard() {
           </button>
         </header>
 
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-slate-800">Your Client Sites</h2>
+          <Link
+            to="/sites/new"
+            className="py-2 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg transition shadow-sm"
+          >
+            + Add New Site
+          </Link>
+        </div>
+
         <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 text-center">
-          <p className="text-slate-500">You can do so many cool and epic operations here at some point 🫨</p>
+          <p className="text-slate-500">You get so many cool and epic sites here at some point 🫨</p>
         </div>
       </div>
     </main>
