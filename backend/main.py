@@ -5,10 +5,14 @@ import bcrypt
 from jose import jwt, JWTError
 import models
 from database import engine, get_db
+from typing import Optional
+from pydantic import ConfigDict
+from pydantic.alias_generators import to_camel
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
+## Users
 def hash_password(password: str) -> str:
     # bcrypt expects bytes and has a hard 72-byte limit
     pwd_bytes = password.encode('utf-8')[:72]
@@ -46,6 +50,8 @@ def get_current_user(authorization: str = Header(None), db: Session = Depends(ge
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+# User Endpoints
 
 # registers an advisor account.
 # Returns 400 Bad Request if the email is already registered, and 201 Created on success
@@ -88,3 +94,66 @@ def logout():
 @app.get("/api/me")
 def read_me(user: models.User = Depends(get_current_user)):
     return {"email": user.email}
+
+
+## Sites
+class SiteBase(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
+    
+    client_name: str
+    address: str
+    latitude: float
+    longitude: float
+    roof_area_m2: Optional[float] = None
+    peak_kwp: float
+
+class SiteCreate(SiteBase):
+    pass
+
+class SiteResponse(SiteBase):
+    id: int
+
+
+# Site Endpoints
+@app.get("/api/sites", response_model=list[SiteResponse])
+def get_sites(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Returns only the caller's sites
+    return db.query(models.Site).filter(models.Site.owner_id == user.id).all()
+
+@app.post("/api/sites", response_model=SiteResponse, status_code=201)
+def create_site(site: SiteCreate, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # .model_dump() extracts the snake_case fields seamlessly matching the SQLAlchemy model
+    db_site = models.Site(**site.model_dump(), owner_id=user.id)
+    db.add(db_site)
+    db.commit()
+    db.refresh(db_site)
+    return db_site
+
+@app.get("/api/sites/{id}", response_model=SiteResponse)
+def get_site(id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    site = db.query(models.Site).filter(models.Site.id == id, models.Site.owner_id == user.id).first()
+    if not site:
+        raise HTTPException(status_code=403, detail="Not the caller ID.")
+    return site
+
+@app.put("/api/sites/{id}", response_model=SiteResponse)
+def update_site(id: int, site_update: SiteCreate, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    site = db.query(models.Site).filter(models.Site.id == id, models.Site.owner_id == user.id).first()
+    if not site:
+        raise HTTPException(status_code=403, detail="Not the caller ID.")
+    
+    for key, value in site_update.model_dump().items():
+        setattr(site, key, value)
+        
+    db.commit()
+    db.refresh(site)
+    return site
+
+@app.delete("/api/sites/{id}", status_code=204)
+def delete_site(id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    site = db.query(models.Site).filter(models.Site.id == id, models.Site.owner_id == user.id).first()
+    if not site:
+        raise HTTPException(status_code=403, detail="Not the caller ID.")
+    db.delete(site)
+    db.commit()
+    return
