@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useParams } from 'react-router-dom'
 
 export default function AddSite() {
+  const { id } = useParams()
+  const isEditMode = !!id
+
   const [clientName, setClientName] = useState('')
   const [address, setAddress] = useState('')
   const [latitude, setLatitude] = useState('')
@@ -13,10 +16,22 @@ export default function AddSite() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (!localStorage.getItem('token')) {
-      navigate('/')
+    if (isEditMode) {
+      const token = localStorage.getItem('token')
+      fetch(`/api/sites/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(async (res) => {
+          if (!res.ok) throw new Error('Failed to fetch site')
+          const data = await res.json()
+          setClientName(data.clientName)
+          setAddress(data.address)
+          setLatitude(data.latitude.toString())
+          setLongitude(data.longitude.toString())
+          setPeakKwp(data.peakKwp.toString())
+          if (data.roofAreaM2) setRoofAreaM2(data.roofAreaM2.toString())
+        })
+        .catch(err => setError(err.message))
     }
-  }, [navigate])
+  }, [id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,9 +53,12 @@ export default function AddSite() {
       payload.roofAreaM2 = parseFloat(roofAreaM2)
     }
 
+    const method = isEditMode ? 'PUT' : 'POST'
+    const url = isEditMode ? `/api/sites/${id}` : '/api/sites'
+
     try {
-      const res = await fetch('/api/sites', {
-        method: 'POST',
+      const res = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
@@ -70,7 +88,7 @@ export default function AddSite() {
         </Link>
         
         <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-          <h1 className="text-2xl font-bold text-slate-900 mb-6">Add New Site</h1>
+          <h1 className="text-2xl font-bold text-slate-900 mb-6">{isEditMode ? 'Edit Site' : 'Add New Site'}</h1>
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg">
@@ -167,7 +185,7 @@ export default function AddSite() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                ) : 'Save Site'}
+                ) : isEditMode ? 'Update Site' : 'Save Site'}
               </button>
             </div>
           </form>

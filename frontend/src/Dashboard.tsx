@@ -17,6 +17,8 @@ export default function Dashboard() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isLoadingData, setIsLoadingData] = useState(true)
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
+  const [siteToDelete, setSiteToDelete] = useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -60,6 +62,27 @@ export default function Dashboard() {
     } finally {
       localStorage.removeItem('token')
       navigate('/')
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!siteToDelete) return
+    setIsDeleting(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/sites/${siteToDelete}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) throw new Error('Failed to delete')
+      
+      // Remove it from the local state list immediately
+      setSites(sites.filter(site => site.id !== siteToDelete))
+    } catch (err) {
+      alert('Error deleting site')
+    } finally {
+      setIsDeleting(false)
+      setSiteToDelete(null)
     }
   }
 
@@ -125,6 +148,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Site Overview; No sites added yet */}
         {sites.length === 0 ? (
           <div className="bg-white p-12 rounded-xl shadow-sm border border-slate-200 text-center">
             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
@@ -140,6 +164,8 @@ export default function Dashboard() {
               + Add Site
             </Link>
           </div>
+
+        // Site Overview; Grid View
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {sites.map((site) => (
@@ -172,14 +198,14 @@ export default function Dashboard() {
                     Open Assessment &rarr;
                   </Link>
                   <div className="flex gap-2">
-                    <button 
-                      onClick={() => alert('Edit modal coming soon')}
-                      className="flex-1 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium rounded-lg transition text-sm"
+                    <Link
+                      to={`/sites/edit/${site.id}`}
+                      className="flex-1 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium rounded-lg transition text-sm text-center"
                     >
                       Edit
-                    </button>
+                    </Link>
                     <button 
-                      onClick={() => alert('Delete confirmation coming soon')}
+                      onClick={() => setSiteToDelete(site.id)}
                       className="flex-1 py-1.5 bg-white border border-slate-200 hover:bg-red-50 text-red-600 font-medium rounded-lg transition text-sm"
                     >
                       Delete
@@ -190,6 +216,7 @@ export default function Dashboard() {
             ))}
           </div>
         ) : (
+        // Site Overview; Table View
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
@@ -213,14 +240,14 @@ export default function Dashboard() {
                     <td className="py-3 px-4 text-sm text-slate-600">{site.latitude.toFixed(4)}, {site.longitude.toFixed(4)}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <button 
-                          onClick={() => alert('Edit modal coming soon')}
+                        <Link
+                          to={`/sites/edit/${site.id}`}
                           className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium rounded-lg transition text-sm"
                         >
                           Edit
-                        </button>
+                        </Link>
                         <button 
-                          onClick={() => alert('Delete confirmation coming soon')}
+                          onClick={() => setSiteToDelete(site.id)}
                           className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-red-50 text-red-600 font-medium rounded-lg transition text-sm"
                         >
                           Delete
@@ -240,6 +267,32 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+    {/* Delete Modal */}
+    {siteToDelete !== null && (
+      <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
+          <h3 className="text-xl font-bold text-slate-900 mb-2">Delete Site</h3>
+          <p className="text-slate-500 mb-6">Are you sure you want to delete this site? This action cannot be undone.</p>
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setSiteToDelete(null)}
+              disabled={isDeleting}
+              className="py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className="py-2 px-4 bg-red-500 hover:bg-red-600 disabled:opacity-70 text-white font-medium rounded-lg transition shadow-sm"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete Site'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </main>
   )
 }

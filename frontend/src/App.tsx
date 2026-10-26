@@ -10,6 +10,7 @@ export default function App() {
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/sites/new" element={<AddSite />} />
+        <Route path="/sites/edit/:id" element={<AddSite />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
