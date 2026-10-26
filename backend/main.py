@@ -9,6 +9,10 @@ from typing import Optional
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
+from energy.pvgis import fetch_pvgis_hourly_data
+from energy.consumption import get_hourly_consumption
+from energy.simulator import calculate_production_summary, simulate_battery
+
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
@@ -157,3 +161,80 @@ def delete_site(id: int, user: models.User = Depends(get_current_user), db: Sess
     db.delete(site)
     db.commit()
     return
+
+# Energy & Battery
+class MonthProduction(BaseModel):
+    month: int
+    kwh: float
+
+class ProductionResponse(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    yearly_kwh: float
+    monthly_kwh: list[MonthProduction]
+
+class BatteryScenario(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    self_used_kwh: float
+    exported_kwh: float
+    self_consumption_percentage: float
+    battery_added_kwh: Optional[float] = None
+
+class BatteryResponse(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    production_kwh: float
+    consumption_kwh: float
+    without_battery: BatteryScenario
+    with_battery: BatteryScenario
+
+
+# Energy Endpoints
+@app.get("/api/sites/{id}/production", response_model=ProductionResponse)
+def get_site_production(
+    id: int, 
+    user: models.User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    site = db.query(models.Site).filter(models.Site.id == id, models.Site.owner_id == user.id).first()
+    if not site:
+        raise HTTPException(status_code=403, detail="Fails when it is not the caller's.")
+
+    # Call PVGIS with site coordinates and panel peak capacity
+    pvgis_hourly = fetch_pvgis_hourly_data(
+        lat=site.latitude, 
+        lon=site.longitude, 
+        peak_kwp=site.peak_kwp
+    )
+    
+    return calculate_production_summary(pvgis_hourly)
+
+
+@app.get("/api/sites/{id}/battery", response_model=BatteryResponse)
+def get_site_battery_assessment(
+    id: int,
+    capacityKwh: float = Query(..., ge=0.0, description="Battery capacity in kWh"),
+    annualUseKwh: float = Query(..., gt=0.0, description="Household annual consumption in kWh"),
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    site = db.query(models.Site).filter(models.Site.id == id, models.Site.owner_id == user.id).first()
+    if not site:
+        raise HTTPException(status_code=403, detail="Fails when it is not the caller's.")
+
+    # Fetch PVGIS generation series
+    pvgis_hourly = fetch_pvgis_hourly_data(
+        lat=site.latitude, 
+        lon=site.longitude, 
+        peak_kwp=site.peak_kwp
+    )
+    
+    # Generate household demand curve from E1A load profile
+    hourly_consumption = get_hourly_consumption(annual_use_kwh=annualUseKwh)
+    
+    # Run hour-by-hour battery simulation
+    return simulate_battery(
+        pvgis_data=pvgis_hourly,
+        hourly_consumption=hourly_consumption,
+        capacity_kwh=capacityKwh,
+        annual_use_kwh=annualUseKwh
+    )
+
