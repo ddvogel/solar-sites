@@ -10,6 +10,7 @@ from database import engine, get_db
 from typing import Optional
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
+from datetime import datetime, timedelta, timezone
 
 from energy.pvgis import fetch_pvgis_hourly_data
 from energy.consumption import get_hourly_consumption
@@ -30,7 +31,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     hash_bytes = hashed_password.encode('utf-8')
     return bcrypt.checkpw(pwd_bytes, hash_bytes)
 
-SECRET_KEY = "supersecretkey" # in production, load from environment
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
+SECRET_KEY = "supersecretkey" # in production, you would this load from environment, but for this assignment I believe we can get away with this
 ALGORITHM = "HS256"
 
 class AuthRequest(BaseModel):
@@ -76,7 +78,8 @@ def register(request: AuthRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     
-    token = jwt.encode({"sub": new_user.email}, SECRET_KEY, algorithm=ALGORITHM)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    token = jwt.encode({"sub": new_user.email, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
     return {"token": token}
 
 # authenticate an advisor using password hash verification.
@@ -89,7 +92,8 @@ def login(request: AuthRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="email or password incorrect.")
     
-    token = jwt.encode({"sub": user.email}, SECRET_KEY, algorithm=ALGORITHM)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    token = jwt.encode({"sub": user.email, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
     return {"token": token}
 
 # session termination endpoint. For stateless JWTs, the server returns 200 OK while the client discards its stored token.

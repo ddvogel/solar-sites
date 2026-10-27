@@ -14,7 +14,8 @@ class User(Base):
     hashed_password = Column(String)
     
     # Establish relationship to sites
-    sites = relationship("Site", back_populates="owner")
+    sites = relationship("Site", back_populates="owner", cascade="all, delete-orphan")
+    # even though users currently can't be deleted, a cascade delete for orphaned sites if a user is deleted is a good addition
 
 class Site(Base):
     __tablename__ = "sites"

@@ -1,9 +1,11 @@
 import requests
 from fastapi import HTTPException
+from functools import lru_cache
 
 # PVGIS 5.3 API endpoint for series data
 PVGIS_URL = "https://re.jrc.ec.europa.eu/api/v5_3/seriescalc"
 
+@lru_cache(maxsize=100)
 def fetch_pvgis_hourly_data(lat: float, lon: float, peak_kwp: float) -> list[dict]:
     params = {
         "lat": lat,
