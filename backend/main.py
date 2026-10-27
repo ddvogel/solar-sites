@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Header
+import os
+from fastapi.responses import FileResponse
+from fastapi import FastAPI, Depends, HTTPException, status, Header, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import bcrypt
@@ -238,3 +240,15 @@ def get_site_battery_assessment(
         annual_use_kwh=annualUseKwh
     )
 
+# Catch-all route to serve the React SPA and static assets
+@app.get("/{catchall:path}")
+def serve_frontend(catchall: str):
+    file_path = os.path.join("static", catchall)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    
+    index_path = os.path.join("static", "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path)
+        
+    raise HTTPException(status_code=404, detail="Frontend build not found. Ensure Vite has built the frontend into /static.")
