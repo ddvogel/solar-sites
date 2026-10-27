@@ -13,11 +13,17 @@ export default function AddSite() {
   const [peakKwp, setPeakKwp] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isFetching, setIsFetching] = useState(isEditMode)
   const navigate = useNavigate()
 
   useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      navigate('/')
+      return
+    }
+
     if (isEditMode) {
-      const token = localStorage.getItem('token')
       fetch(`/api/sites/${id}`, { headers: { Authorization: `Bearer ${token}` } })
         .then(async (res) => {
           if (!res.ok) throw new Error('Failed to fetch site')
@@ -30,8 +36,9 @@ export default function AddSite() {
           if (data.roofAreaM2) setRoofAreaM2(data.roofAreaM2.toString())
         })
         .catch(err => setError(err.message))
+        .finally(() => setIsFetching(false))
     }
-  }, [id])
+  }, [id, isEditMode, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -78,6 +85,17 @@ export default function AddSite() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (isFetching) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
+        <svg className="animate-spin h-8 w-8 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </main>
+    )
   }
 
   return (
