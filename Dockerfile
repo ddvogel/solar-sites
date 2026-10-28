@@ -1,5 +1,5 @@
 # Build the React frontend using Bun
-FROM oven/bun:1 as frontend-build
+FROM oven/bun:1 AS frontend-build
 WORKDIR /app/frontend
 
 COPY frontend/package.json frontend/bun.lockb* ./
@@ -13,7 +13,7 @@ FROM python:3.10-slim
 WORKDIR /app/backend
 
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --only-binary :all: -r requirements.txt || pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./
 
